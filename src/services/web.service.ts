@@ -1,6 +1,5 @@
 import { ChatPostMessageArguments, FilesUploadArguments, WebClient, FilesInfoArguments } from '@slack/web-api';
 import { createWriteStream, createReadStream, unlink } from 'fs';
-import path from 'path';
 import Axios from 'axios';
 // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
 // @ts-ignore
@@ -116,8 +115,7 @@ export class WebService {
   }
 
   compressFile(rawLocation: string, fileName: string): Promise<string> {
-    const compressedDir = path.resolve(process.cwd(), 'src/output/compressed/');
-    const location = `${compressedDir}/${fileName}.mp4`;
+    const location = `${process.env.COMPRESSOR_COMPRESSED_DIR}/${fileName}.mp4`;
     console.log('Compress Location', location);
     return new Promise((resolve, reject) => {
       hbjs
@@ -133,8 +131,7 @@ export class WebService {
 
   downloadFile(url: string, fileName: string): Promise<string> {
     return new Promise(async (resolve, reject) => {
-      const rawDir = path.resolve(process.cwd(), 'src/output/raw/');
-      const location = `${rawDir}/${fileName}`;
+      const location = `${process.env.COMPRESSOR_DOWNLOAD_DIR}/${fileName}`;
       console.log('Download Location', location);
       const writer = createWriteStream(location);
       const response = await Axios({
