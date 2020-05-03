@@ -1,10 +1,9 @@
-import {
-  ChatDeleteArguments,
-  ChatPostMessageArguments,
-  FilesUploadArguments,
-  WebAPICallResult,
-  WebClient,
-} from '@slack/web-api';
+import { ChatPostMessageArguments, FilesUploadArguments, WebClient, FilesInfoArguments } from '@slack/web-api';
+import { createWriteStream, createReadStream, unlink } from 'fs';
+import Axios from 'axios';
+// eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+// @ts-ignore
+import hbjs from 'handbrake-js';
 
 export class WebService {
   public static getInstance(): WebService {
@@ -16,58 +15,149 @@ export class WebService {
   private static instance: WebService;
   private web: WebClient = new WebClient(process.env.COMPRESSOR_BOT_TOKEN);
 
-  /**
-   * Handles deletion of messages.
-   */
-  public deleteMessage(channel: string, ts: string): void {
-    const compressorToken: string | undefined = process.env.COMPRESSOR_BOT_TOKEN;
-    const deleteRequest: ChatDeleteArguments = {
-      token: compressorToken,
-      channel,
-      ts,
-      // eslint-disable-next-line @typescript-eslint/camelcase
-      as_user: true,
+  public isVideoFile(fileType: string): boolean {
+    const videoTypes: string[] = [
+      'mkv',
+      'flv',
+      'vob',
+      'ogv',
+      'ogg',
+      'drc',
+      'mng',
+      'avi',
+      'mov',
+      'qt',
+      'wmv',
+      'yuv',
+      'rm',
+      'rmvb',
+      'asf',
+      'amv',
+      'mp4',
+      'm4p',
+      'm4v',
+      'mpg',
+      'mp2',
+      'mpeg',
+      'mpe',
+      'mpv',
+      'mpg',
+      'mpeg',
+      'm2v',
+      'm4v',
+      'svi',
+      '3gp',
+      '3g2',
+      'mxf',
+      'roq',
+      'nsv',
+      'f4v',
+      'f4p',
+      'f4a',
+      'f4b',
+    ];
+    return videoTypes.includes(fileType);
+  }
+
+  public async startCompression(file: string, channel: string): Promise<void> {
+    const options: FilesInfoArguments = {
+      file,
     };
 
-    this.web.chat.delete(deleteRequest).catch((e) => {
-      if (e.data.error === 'message_not_found') {
-        console.log('Message already deleted, no need to retry');
-      } else {
+    return await this.web.files
+      .info(options)
+      .then(async (info: any) => {
+        if (this.isVideoFile(info.file.filetype)) {
+          console.log('Filetype: ', info.file.filetype);
+          // this.sendMessage(channel, 'Compressing...', info.file.shares.public[channel][0].ts);
+          console.time('Downloading took');
+          const file = await this.downloadFile(info.file.url_private_download, `${info.file.id}.${info.file.filetype}`);
+          console.timeEnd('Downloading took');
+          console.time('Compression took');
+          const compressedFile = await this.compressFile(file, `${info.file.id}`);
+          console.timeEnd('Compression took');
+          console.log('Uploading...');
+          await this.uploadVideoFile(channel, info.file.shares.public[channel][0].ts, compressedFile);
+          this.cleanup(file, compressedFile);
+        }
+      })
+      .catch((e) => {
         console.error(e);
-        console.error('Unable to delete message. Retrying in 5 seconds...');
-        setTimeout(() => this.deleteMessage(channel, ts), 5000);
-      }
+      });
+  }
+
+  cleanup(raw: string, compressed: string): void {
+    unlink(raw, () => console.log(`Successfully removed: ${raw}`));
+    unlink(compressed, () => console.log(`Successfully removed: ${compressed}`));
+  }
+
+  uploadVideoFile(channel: string, ts: string, location: string): Promise<void> {
+    const uploadRequest: FilesUploadArguments = {
+      channels: channel,
+      file: createReadStream(location),
+      token: process.env.COMPRESSOR_BOT_USER_TOKEN,
+      // eslint-disable-next-line @typescript-eslint/camelcase
+      thread_ts: ts,
+    };
+    return new Promise((resolve, reject) => {
+      console.time('Upload took');
+      this.web.files
+        .upload(uploadRequest)
+        .then(() => {
+          console.timeEnd('Upload took');
+          resolve();
+        })
+        .catch((e) => {
+          console.error(e);
+          reject(e);
+        });
     });
   }
 
+  compressFile(rawLocation: string, fileName: string): Promise<string> {
+    const location = `/Users/steve/Desktop/projects/Compressor/src/output/compressed/${fileName}.mp4`;
+    return new Promise((resolve, reject) => {
+      hbjs
+        .spawn({
+          input: rawLocation,
+          output: location,
+          preset: 'Very Fast 480p30',
+        })
+        .on('error', (e: Error) => reject(e))
+        .on('end', () => resolve(location));
+    });
+  }
+
+  downloadFile(url: string, fileName: string): Promise<string> {
+    return new Promise(async (resolve, reject) => {
+      const saveLoc = `/Users/steve/Desktop/projects/Compressor/src/output/raw/${fileName}`;
+      const writer = createWriteStream(saveLoc);
+      const response = await Axios({
+        url,
+        method: 'GET',
+        responseType: 'stream',
+        headers: {
+          Authorization: `Bearer ${process.env.COMPRESSOR_BOT_TOKEN}`,
+        },
+      });
+      response.data.pipe(writer);
+
+      writer.on('finish', () => resolve(saveLoc));
+      writer.on('error', (e) => reject(e));
+    });
+  }
   /**
    * Handles sending messages to the chat.
    */
-  public sendMessage(channel: string, text: string): void {
-    const token: string | undefined = process.env.COMPRESSOR_BOT_TOKEN;
+  public sendMessage(channel: string, text: string, threadTimeStamp: string): void {
+    const token: string | undefined = process.env.COMPRESSOR_BOT_USER_TOKEN;
     const postRequest: ChatPostMessageArguments = {
       token,
       channel,
       text,
+      // eslint-disable-next-line @typescript-eslint/camelcase
+      thread_ts: threadTimeStamp,
     };
     this.web.chat.postMessage(postRequest).catch((e) => console.error(e));
-  }
-
-  public getAllUsers(): Promise<WebAPICallResult> {
-    return this.web.users.list();
-  }
-
-  public uploadFile(channel: string, content: string, title?: string): void {
-    const uploadRequest: FilesUploadArguments = {
-      channels: channel,
-      content,
-      filetype: 'markdown',
-      title,
-      // eslint-disable-next-line @typescript-eslint/camelcase
-      initial_comment: title,
-      token: process.env.COMPRESSOR_BOT_USER_TOKEN,
-    };
-
-    this.web.files.upload(uploadRequest).catch((e) => console.error(e));
   }
 }

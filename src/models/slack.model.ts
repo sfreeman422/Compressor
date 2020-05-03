@@ -36,9 +36,12 @@ export interface Event {
   subtype: string;
   text: string;
   user: string;
+  user_id: string;
   username: string;
   ts: string;
   channel: string;
+  channel_id: string;
+  file_id: string;
   event_ts: string;
   channel_type: string;
   authed_users: string[];

@@ -1,17 +1,22 @@
 import express, { Request, Response, Router } from 'express';
-// import { SlackService } from '../services/slack.service';
-// import { WebService } from '../services/web.service';
+import { WebService } from '../services/web.service';
 import { EventRequest } from '../models/slack.model';
 
 export const eventController: Router = express.Router();
 
-// const webService = WebService.getInstance();
-// const slackService = SlackService.getInstance();
+const webService = WebService.getInstance();
 
-eventController.post('/event/handle', (req: Request, res: Response) => {
-  const request: EventRequest = req.body;
-  console.log(request);
-  console.time('respond-to-event');
-  console.timeEnd('respond-to-event');
-  res.send({ challenge: request.challenge });
+eventController.post('/event/handle', async (req: Request, res: Response) => {
+  if (req.body.challenge) {
+    res.send({ challenge: req.body.challenge });
+  } else {
+    // This 200 is necessary in order to acknowledge that we have received the event and are handling it.
+    // Without this, we will receive duplicate notifications for the same events.
+    res.sendStatus(200);
+    const request: EventRequest = req.body;
+    if (request.event.type === 'file_shared' && request.event.user_id && request.event.user_id !== 'U012YEAJ1PV') {
+      console.log('New media uploaded by: ', request.event.user_id);
+      await webService.startCompression(request.event.file_id, request.event.channel_id);
+    }
+  }
 });
