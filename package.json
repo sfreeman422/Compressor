@@ -35,6 +35,7 @@
   "dependencies": {
     "@slack/events-api": "^2.3.2",
     "@slack/web-api": "^5.8.1",
+    "@types/fluent-ffmpeg": "^2.1.14",
     "axios": "^0.19.2",
     "express": "^4.17.1",
     "fluent-ffmpeg": "^2.1.2",

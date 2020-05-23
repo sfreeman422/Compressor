@@ -1,9 +1,8 @@
-import { ChatPostMessageArguments, FilesUploadArguments, WebClient, FilesInfoArguments } from '@slack/web-api';
+import { ChatPostMessageArguments, FilesUploadArguments, WebClient } from '@slack/web-api';
 import { createWriteStream, createReadStream, unlink } from 'fs';
-import Axios from 'axios';
-// eslint-disable-next-line @typescript-eslint/ban-ts-ignore
-// @ts-ignore
-import hbjs from 'handbrake-js';
+import Axios, { AxiosResponse } from 'axios';
+import ffmpeg from 'fluent-ffmpeg';
+import { Writable } from 'stream';
 
 export class WebService {
   public static getInstance(): WebService {
@@ -59,36 +58,30 @@ export class WebService {
     return videoTypes.includes(fileType);
   }
 
-  public async startCompression(file: string, channel: string): Promise<void> {
-    const options: FilesInfoArguments = {
-      file,
-    };
-
-    return await this.web.files
-      .info(options)
-      .then(async (info: any) => {
-        if (this.isVideoFile(info.file.filetype)) {
-          console.log('Filetype: ', info.file.filetype);
-          // this.sendMessage(channel, 'Compressing...', info.file.shares.public[channel][0].ts);
-          console.time('Downloading took');
-          const file = await this.downloadFile(info.file.url_private_download, `${info.file.id}.${info.file.filetype}`);
-          console.timeEnd('Downloading took');
-          console.time('Compression took');
-          const compressedFile = await this.compressFile(file, `${info.file.id}`);
-          console.timeEnd('Compression took');
-          console.log('Uploading...');
-          await this.uploadVideoFile(channel, info.file.shares.public[channel][0].ts, compressedFile);
-          this.cleanup(file, compressedFile);
-        }
-      })
-      .catch((e) => {
-        console.error(e);
-      });
+  public getFileInfo(file: string): Promise<any> {
+    return this.web.files.info({ file });
   }
 
-  cleanup(raw: string, compressed: string): void {
-    unlink(raw, () => console.log(`Successfully removed: ${raw}`));
-    unlink(compressed, () => console.log(`Successfully removed: ${compressed}`));
+  public async startCompression(file: string, channel: string): Promise<void> {
+    const fileInfo: any = await this.getFileInfo(file);
+
+    if (this.isVideoFile(fileInfo.file.filetype)) {
+      console.log('Filetype: ', fileInfo.file.filetype);
+      // this.sendMessage(channel, 'Compressing...', info.file.shares.public[channel][0].ts);
+      console.time('downloading and compressing took');
+      const file = await this.downloadAndCompressFile(fileInfo.file.url_private_download, `${fileInfo.file.id}.mp4`);
+      console.timeEnd('downloading and compressing took');
+      // console.time('Compression took');
+      // const compressedFile = await this.compressFile(file, `${info.file.id}`);
+      // console.timeEnd('Compression took');
+      console.log('Uploading...');
+      await this.uploadVideoFile(channel, fileInfo.file.shares.public[channel][0].ts, file);
+      this.cleanup(file);
+    }
+  }
+
+  cleanup(file: string): void {
+    unlink(file, () => console.log(`Successfully removed: ${file}`));
   }
 
   uploadVideoFile(channel: string, ts: string, location: string): Promise<void> {
@@ -114,27 +107,12 @@ export class WebService {
     });
   }
 
-  compressFile(rawLocation: string, fileName: string): Promise<string> {
-    const location = `${process.env.COMPRESSOR_COMPRESSED_DIR}/${fileName}.mp4`;
-    console.log('Compress Location', location);
-    return new Promise((resolve, reject) => {
-      hbjs
-        .spawn({
-          input: rawLocation,
-          output: location,
-          preset: 'Very Fast 480p30',
-        })
-        .on('error', (e: Error) => reject(e))
-        .on('end', () => resolve(location));
-    });
-  }
-
-  downloadFile(url: string, fileName: string): Promise<string> {
+  downloadAndCompressFile(url: string, fileName: string): Promise<string> {
     return new Promise(async (resolve, reject) => {
       const location = `${process.env.COMPRESSOR_DOWNLOAD_DIR}/${fileName}`;
       console.log('Download Location', location);
       const writer = createWriteStream(location);
-      const response = await Axios({
+      const response: AxiosResponse = await Axios({
         url,
         method: 'GET',
         responseType: 'stream',
@@ -142,7 +120,18 @@ export class WebService {
           Authorization: `Bearer ${process.env.COMPRESSOR_BOT_TOKEN}`,
         },
       });
-      response.data.pipe(writer);
+      const compress: Writable = ffmpeg()
+        .format('mp4')
+        .size('640x480')
+        .fps(29.7)
+        .autoPad()
+        .pipe(writer)
+        .on('error', (e: any) => {
+          console.error('ffmpeg error');
+          console.error(e);
+        });
+
+      response.data.pipe(compress);
 
       writer.on('finish', () => resolve(location));
       writer.on('error', (e) => reject(e));
