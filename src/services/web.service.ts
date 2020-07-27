@@ -67,8 +67,9 @@ export class WebService {
     return await this.web.files
       .info(options)
       .then(async (info: any) => {
+        console.log('Filetype: ', info.file.filetype);
         if (this.isVideoFile(info.file.filetype)) {
-          console.log('Filetype: ', info.file.filetype);
+          console.log('Filetype is video, beginning download...');
           // this.sendMessage(channel, 'Compressing...', info.file.shares.public[channel][0].ts);
           console.time('Downloading took');
           const file = await this.downloadFile(info.file.url_private_download, `${info.file.id}.${info.file.filetype}`);
