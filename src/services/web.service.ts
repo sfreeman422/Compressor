@@ -67,9 +67,14 @@ export class WebService {
     return await this.web.files
       .info(options)
       .then(async (info: any) => {
-        console.log(info.file);
-        console.log('Filetype: ', info.file.filetype);
-        if (this.isVideoFile(info.file.filetype)) {
+        let fallbackFileType = info.file.url_private_download.slice(
+          info.file.url_private_download?.lastIndexOf('/') + 1,
+          info.file.url_private_download.length,
+        );
+        fallbackFileType = fallbackFileType.slice(fallbackFileType.indexOf('.') + 1, fallbackFileType.length);
+        const fileType = info.file.filetype || fallbackFileType;
+        console.log('Filetype: ', fileType);
+        if (this.isVideoFile(fileType)) {
           console.log('Filetype is video, beginning download...');
           // this.sendMessage(channel, 'Compressing...', info.file.shares.public[channel][0].ts);
           console.time('Downloading took');
