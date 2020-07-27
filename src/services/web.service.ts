@@ -67,6 +67,7 @@ export class WebService {
     return await this.web.files
       .info(options)
       .then(async (info: any) => {
+        console.log(info.file);
         console.log('Filetype: ', info.file.filetype);
         if (this.isVideoFile(info.file.filetype)) {
           console.log('Filetype is video, beginning download...');
