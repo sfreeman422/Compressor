@@ -77,12 +77,12 @@ export class WebService {
         if (this.isVideoFile(fileType)) {
           console.log('Filetype is video, beginning download...');
           // this.sendMessage(channel, 'Compressing...', info.file.shares.public[channel][0].ts);
-          console.time('Downloading took');
+          console.time(`Download - ${info.file.url_private_download}`);
           const file = await this.downloadFile(info.file.url_private_download, `${info.file.id}.${fileType}`);
-          console.timeEnd('Downloading took');
-          console.time('Compression took');
+          console.timeEnd(`Download - ${info.file.url_private_download}`);
+          console.time(`Compression - ${info.file.url_private_download}`);
           const compressedFile = await this.compressFile(file, `${info.file.id}`);
-          console.timeEnd('Compression took');
+          console.timeEnd(`Compression - ${info.file.url_private_download}`);
           console.log('Uploading...');
           await this.uploadVideoFile(channel, info.file.shares.public[channel][0].ts, compressedFile);
           this.cleanup(file, compressedFile);
