@@ -67,12 +67,7 @@ export class WebService {
     return await this.web.files
       .info(options)
       .then(async (info: any) => {
-        let fallbackFileType = info.file.url_private_download.slice(
-          info.file.url_private_download?.lastIndexOf('/') + 1,
-          info.file.url_private_download.length,
-        );
-        fallbackFileType = fallbackFileType.slice(fallbackFileType.indexOf('.') + 1, fallbackFileType.length);
-        const fileType = info.file.filetype || fallbackFileType;
+        const fileType = info.file.filetype;
         console.log('Filetype: ', fileType);
         if (this.isVideoFile(fileType)) {
           console.log('Filetype is video, beginning download...');
