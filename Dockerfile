@@ -14,4 +14,6 @@ RUN mkdir /usr/src/compressor/dist/output/raw
 RUN mkdir /usr/src/compressor/dist/output/compressed
 ENV COMPRESSOR_DOWNLOAD_DIR=/usr/src/compressor/dist/output/raw
 ENV COMPRESSOR_COMPRESSED_DIR=/usr/src/compressor/dist/output/compressed
+ENV COMPRESSOR_BOT_TOKEN=$COMPRESSOR_BOT_TOKEN
+ENV COMPRESSOR_BOT_USER_TOKEN=$COMPRESSOR_BOT_USER_TOKEN
 CMD ["node", "./dist/index.js"]
